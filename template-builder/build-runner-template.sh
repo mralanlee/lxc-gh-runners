@@ -165,6 +165,22 @@ create_container() {
         --start 1
 }
 
+wait_for_network() {
+    log "waiting for container network"
+
+    local i
+    for i in $(seq 1 30); do
+        if pct exec "$TEMPLATE_VMID" -- getent hosts github.com >/dev/null 2>&1; then
+            log "network up after ${i} attempt(s)"
+            return
+        fi
+        sleep 2
+    done
+
+    log "container network did not come up within 60s"
+    exit 1
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -174,6 +190,7 @@ main() {
     ensure_ubuntu_template
     reset_vmid
     create_container
+    wait_for_network
 }
 
 main "$@"
