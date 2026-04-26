@@ -254,6 +254,27 @@ EOF
 )"
 }
 
+create_runner_user() {
+    log "creating runner user"
+
+    in_container "$(cat <<'EOF'
+set -euo pipefail
+
+if ! id runner >/dev/null 2>&1; then
+    useradd --create-home --shell /bin/bash runner
+fi
+
+usermod -aG docker runner
+
+cat > /etc/sudoers.d/runner <<'SUDO'
+runner ALL=(ALL) NOPASSWD:ALL
+SUDO
+chmod 0440 /etc/sudoers.d/runner
+visudo -c -f /etc/sudoers.d/runner
+EOF
+)"
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -266,6 +287,7 @@ main() {
     wait_for_network
     install_base_packages
     install_docker
+    create_runner_user
 }
 
 main "$@"
