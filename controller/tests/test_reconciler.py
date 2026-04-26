@@ -85,3 +85,81 @@ async def test_reaps_ghost_db_row(conn, proxmox, github_client):
 
     row = conn.execute("SELECT * FROM runners WHERE job_id=1").fetchone()
     assert row["state"] == "cleaned"
+
+
+async def test_reaps_timed_out_running_lxc(conn, proxmox, github_client):
+    db.insert_pending_runner(conn, job_id=1)
+    db.update_state_by_id(conn, runner_id=1, new_state="running", vmid=9100)
+    long_ago = (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat()
+    conn.execute("UPDATE runners SET started_at=? WHERE id=1", (long_ago,))
+    proxmox.list_lxcs_in_range.return_value = [9100]
+    proxmox.get_create_time.return_value = datetime.fromisoformat(long_ago)
+    proxmox.get_description.return_value = f"job_id=1 started_at={long_ago}"
+
+    await reconcile_once(
+        conn=conn, proxmox=proxmox, github=github_client,
+        vmid_range=(9100, 9199), max_job_duration=timedelta(hours=6),
+    )
+
+    proxmox.stop.assert_called_with(vmid=9100)
+    proxmox.destroy.assert_called_with(vmid=9100)
+    row = conn.execute("SELECT * FROM runners WHERE job_id=1").fetchone()
+    assert row["state"] == "failed"
+    assert row["last_error"] == "timeout"
+
+
+async def test_polls_github_and_marks_completed(conn, proxmox, github_client):
+    db.insert_pending_runner(conn, job_id=1, repo="myorg/repo")
+    old = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    db.update_state_by_id(conn, runner_id=1, new_state="running", vmid=9100)
+    conn.execute("UPDATE runners SET started_at=? WHERE id=1", (old,))
+    proxmox.list_lxcs_in_range.return_value = [9100]
+    proxmox.get_create_time.return_value = datetime.fromisoformat(old)
+    proxmox.get_description.return_value = f"job_id=1 started_at={old}"
+    github_client.get_workflow_job = AsyncMock(
+        return_value={"status": "completed", "conclusion": "success"}
+    )
+
+    await reconcile_once(
+        conn=conn, proxmox=proxmox, github=github_client,
+        vmid_range=(9100, 9199), max_job_duration=timedelta(hours=6),
+    )
+
+    row = conn.execute("SELECT * FROM runners WHERE job_id=1").fetchone()
+    assert row["state"] == "completed"
+
+
+async def test_does_not_poll_recently_started_runner(conn, proxmox, github_client):
+    db.insert_pending_runner(conn, job_id=1, repo="myorg/repo")
+    fresh = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+    db.update_state_by_id(conn, runner_id=1, new_state="running", vmid=9100)
+    conn.execute("UPDATE runners SET started_at=? WHERE id=1", (fresh,))
+    proxmox.list_lxcs_in_range.return_value = [9100]
+    proxmox.get_create_time.return_value = datetime.fromisoformat(fresh)
+    proxmox.get_description.return_value = f"job_id=1 started_at={fresh}"
+    github_client.get_workflow_job = AsyncMock()
+
+    await reconcile_once(
+        conn=conn, proxmox=proxmox, github=github_client,
+        vmid_range=(9100, 9199), max_job_duration=timedelta(hours=6),
+    )
+
+    github_client.get_workflow_job.assert_not_called()
+
+
+async def test_skips_polling_when_no_repo(conn, proxmox, github_client):
+    db.insert_pending_runner(conn, job_id=1)  # no repo
+    old = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    db.update_state_by_id(conn, runner_id=1, new_state="running", vmid=9100)
+    conn.execute("UPDATE runners SET started_at=? WHERE id=1", (old,))
+    proxmox.list_lxcs_in_range.return_value = [9100]
+    proxmox.get_create_time.return_value = datetime.fromisoformat(old)
+    proxmox.get_description.return_value = f"job_id=1 started_at={old}"
+    github_client.get_workflow_job = AsyncMock()
+
+    await reconcile_once(
+        conn=conn, proxmox=proxmox, github=github_client,
+        vmid_range=(9100, 9199), max_job_duration=timedelta(hours=6),
+    )
+
+    github_client.get_workflow_job.assert_not_called()

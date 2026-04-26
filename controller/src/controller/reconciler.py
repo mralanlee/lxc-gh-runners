@@ -57,6 +57,44 @@ async def reconcile_once(
                 conn, event="reaped_ghost", job_id=row["job_id"], vmid=row["vmid"]
             )
 
+    # 3. Reap timeouts
+    for row in db.select_active_with_vmid(conn):
+        started = datetime.fromisoformat(row["started_at"])
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if now - started < max_job_duration:
+            continue
+        try:
+            proxmox.stop(vmid=row["vmid"])
+            proxmox.destroy(vmid=row["vmid"])
+        except Exception:
+            log.exception("force-stop failed for vmid=%s", row["vmid"])
+        db.update_state_by_id(
+            conn, runner_id=row["id"], new_state="failed",
+            last_error="timeout", cleaned_at=now,
+        )
+        db.audit(conn, event="reaped_timeout", job_id=row["job_id"], vmid=row["vmid"])
+
+    # 4. Catch missed 'completed' webhooks
+    for row in db.select_by_state(conn, "running"):
+        started = datetime.fromisoformat(row["started_at"])
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if now - started < timedelta(minutes=5):
+            continue
+        if not row["repo"]:
+            continue
+        try:
+            job = await github.get_workflow_job(repo=row["repo"], job_id=row["job_id"])
+            if job.get("status") in ("completed", "cancelled"):
+                db.update_state_by_id(conn, runner_id=row["id"], new_state="completed")
+                db.audit(
+                    conn, event="detected_completed_via_polling",
+                    job_id=row["job_id"], vmid=row["vmid"],
+                )
+        except Exception:
+            log.exception("github poll failed for job_id=%s", row["job_id"])
+
 
 def _parse_job_id(description: str) -> int | None:
     for tok in description.split():
