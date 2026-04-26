@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sqlite3
 from datetime import datetime, timezone
@@ -100,3 +101,27 @@ async def cleanup_pass(*, conn, proxmox) -> None:
             db.audit(
                 conn, event="cleanup_failed", job_id=job_id, vmid=vmid, detail=str(e)
             )
+
+
+async def run(
+    *,
+    conn,
+    proxmox,
+    github,
+    cap: int,
+    template_vmid: int,
+    vmid_range: tuple[int, int],
+    runner_labels: list[str],
+    interval: float = 2.0,
+) -> None:
+    while True:
+        try:
+            await spawn_pass(
+                conn=conn, proxmox=proxmox, github=github,
+                cap=cap, template_vmid=template_vmid, vmid_range=vmid_range,
+                runner_labels=runner_labels,
+            )
+            await cleanup_pass(conn=conn, proxmox=proxmox)
+        except Exception:
+            log.exception("worker tick failed")
+        await asyncio.sleep(interval)

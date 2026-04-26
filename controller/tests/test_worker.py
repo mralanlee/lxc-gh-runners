@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
@@ -125,3 +126,25 @@ async def test_cleanup_pass_marks_failed_on_error(conn, proxmox):
     row = conn.execute("SELECT * FROM runners WHERE id=1").fetchone()
     assert row["state"] == "failed"
     assert "locked" in row["last_error"]
+
+
+async def test_run_loop_calls_passes_then_sleeps(conn, proxmox, github_client, monkeypatch):
+    sleeps: list[float] = []
+
+    async def fake_sleep(s):
+        sleeps.append(s)
+        if len(sleeps) >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("controller.worker.asyncio.sleep", fake_sleep)
+
+    from controller.worker import run
+
+    with pytest.raises(asyncio.CancelledError):
+        await run(
+            conn=conn, proxmox=proxmox, github=github_client,
+            cap=3, template_vmid=9000, vmid_range=(9100, 9199),
+            runner_labels=["self-hosted", "lxc"], interval=2.0,
+        )
+
+    assert sleeps == [2.0, 2.0]
