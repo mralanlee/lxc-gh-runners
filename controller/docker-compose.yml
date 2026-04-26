@@ -1,0 +1,9 @@
+services:
+  controller:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    ports:
+      - "8000:8000"
