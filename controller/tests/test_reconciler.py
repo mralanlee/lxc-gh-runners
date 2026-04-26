@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
@@ -163,3 +164,26 @@ async def test_skips_polling_when_no_repo(conn, proxmox, github_client):
     )
 
     github_client.get_workflow_job.assert_not_called()
+
+
+async def test_reconciler_run_calls_reconcile_then_sleeps(conn, proxmox, github_client, monkeypatch):
+    sleeps: list[float] = []
+
+    async def fake_sleep(s):
+        sleeps.append(s)
+        if len(sleeps) >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("controller.reconciler.asyncio.sleep", fake_sleep)
+    proxmox.list_lxcs_in_range.return_value = []
+
+    from controller.reconciler import run
+
+    with pytest.raises(asyncio.CancelledError):
+        await run(
+            conn=conn, proxmox=proxmox, github=github_client,
+            vmid_range=(9100, 9199), max_job_duration=timedelta(hours=6),
+            interval=300.0,
+        )
+
+    assert sleeps == [300.0, 300.0]

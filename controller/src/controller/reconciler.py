@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -104,3 +105,23 @@ def _parse_job_id(description: str) -> int | None:
             except ValueError:
                 return None
     return None
+
+
+async def run(
+    *,
+    conn,
+    proxmox,
+    github,
+    vmid_range: tuple[int, int],
+    max_job_duration: timedelta,
+    interval: float = 300.0,
+) -> None:
+    while True:
+        try:
+            await reconcile_once(
+                conn=conn, proxmox=proxmox, github=github,
+                vmid_range=vmid_range, max_job_duration=max_job_duration,
+            )
+        except Exception:
+            log.exception("reconciler tick failed")
+        await asyncio.sleep(interval)
