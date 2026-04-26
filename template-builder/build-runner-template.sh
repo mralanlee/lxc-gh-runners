@@ -28,6 +28,9 @@ INSTALL_PATH="/usr/local/sbin/build-runner-template.sh"
 CRON_PATH="/etc/cron.d/build-runner-template"
 CRON_SCHEDULE="0 3 1 */3 *"   # 03:00 on day 1 of Jan/Apr/Jul/Oct
 
+# Resolved by ensure_ubuntu_template().
+UBUNTU_TEMPLATE_FILENAME=""
+
 # === Helpers =================================================================
 
 log() {
@@ -100,12 +103,49 @@ EOF
     chmod 0644 "$CRON_PATH"
 }
 
+ensure_ubuntu_template() {
+    log "ensuring ubuntu ${UBUNTU_VERSION} base template is present"
+
+    pveam update >/dev/null
+
+    local existing
+    existing="$(pveam list local \
+        | awk 'NR>1 {print $1}' \
+        | sed 's|^local:vztmpl/||' \
+        | grep -E "^ubuntu-${UBUNTU_VERSION}-standard_.*_amd64\.tar\.zst$" \
+        | sort \
+        | tail -n1 || true)"
+
+    if [[ -n "$existing" ]]; then
+        UBUNTU_TEMPLATE_FILENAME="$existing"
+        log "found existing template: ${UBUNTU_TEMPLATE_FILENAME}"
+        return
+    fi
+
+    local available
+    available="$(pveam available --section system \
+        | awk '{print $2}' \
+        | grep -E "^ubuntu-${UBUNTU_VERSION}-standard_.*_amd64\.tar\.zst$" \
+        | sort \
+        | tail -n1 || true)"
+
+    if [[ -z "$available" ]]; then
+        log "no ubuntu ${UBUNTU_VERSION} template available from pveam"
+        exit 1
+    fi
+
+    log "downloading ${available}"
+    pveam download local "$available"
+    UBUNTU_TEMPLATE_FILENAME="$available"
+}
+
 # === Entrypoint ==============================================================
 
 main() {
     log "build-runner-template.sh starting; VMID=${TEMPLATE_VMID}"
     preflight
     self_install
+    ensure_ubuntu_template
 }
 
 main "$@"
