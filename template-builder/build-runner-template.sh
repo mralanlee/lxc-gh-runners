@@ -52,14 +52,39 @@ in_container() {
 }
 
 # === Steps ===================================================================
-# Each step is implemented in its own function and wired into main() below.
-# Functions are added by subsequent tasks.
+
+preflight() {
+    log "pre-flight checks"
+
+    if [[ $EUID -ne 0 ]]; then
+        log "must run as root"
+        exit 1
+    fi
+
+    local cmd
+    for cmd in pct pveam pvesm; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            log "required command not found: ${cmd}"
+            exit 1
+        fi
+    done
+
+    if ! pvesm status | awk 'NR>1 {print $1}' | grep -qx "$STORAGE_POOL"; then
+        log "storage pool not found: ${STORAGE_POOL}"
+        exit 1
+    fi
+
+    if [[ ! -d "/sys/class/net/${BRIDGE}" ]]; then
+        log "bridge not found: ${BRIDGE}"
+        exit 1
+    fi
+}
 
 # === Entrypoint ==============================================================
 
 main() {
     log "build-runner-template.sh starting; VMID=${TEMPLATE_VMID}"
-    log "no steps wired yet"
+    preflight
 }
 
 main "$@"
