@@ -76,5 +76,27 @@ async def _spawn_one(
 
 
 async def cleanup_pass(*, conn, proxmox) -> None:
-    """Implemented in Task 11."""
-    pass
+    rows = db.select_by_state(conn, "completed")
+    for row in rows:
+        runner_id = row["id"]
+        vmid = row["vmid"]
+        job_id = row["job_id"]
+        try:
+            if vmid is not None:
+                proxmox.stop(vmid=vmid)
+                proxmox.destroy(vmid=vmid)
+            db.update_state_by_id(
+                conn,
+                runner_id=runner_id,
+                new_state="cleaned",
+                cleaned_at=datetime.now(timezone.utc),
+            )
+            db.audit(conn, event="cleanup_succeeded", job_id=job_id, vmid=vmid)
+        except Exception as e:
+            log.exception("cleanup failed for job_id=%s vmid=%s", job_id, vmid)
+            db.update_state_by_id(
+                conn, runner_id=runner_id, new_state="failed", last_error=str(e)
+            )
+            db.audit(
+                conn, event="cleanup_failed", job_id=job_id, vmid=vmid, detail=str(e)
+            )

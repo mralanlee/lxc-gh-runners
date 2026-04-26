@@ -100,3 +100,28 @@ async def test_spawn_pass_processes_only_up_to_slots(conn, proxmox, github_clien
     ).fetchone()["c"]
     assert running == 3
     assert pending == 1
+
+
+async def test_cleanup_pass_destroys_completed(conn, proxmox):
+    db.insert_pending_runner(conn, job_id=1)
+    db.update_state_by_id(conn, runner_id=1, new_state="completed", vmid=9100)
+
+    await cleanup_pass(conn=conn, proxmox=proxmox)
+
+    proxmox.stop.assert_called_once_with(vmid=9100)
+    proxmox.destroy.assert_called_once_with(vmid=9100)
+    row = conn.execute("SELECT * FROM runners WHERE id=1").fetchone()
+    assert row["state"] == "cleaned"
+    assert row["cleaned_at"] is not None
+
+
+async def test_cleanup_pass_marks_failed_on_error(conn, proxmox):
+    db.insert_pending_runner(conn, job_id=1)
+    db.update_state_by_id(conn, runner_id=1, new_state="completed", vmid=9100)
+    proxmox.stop.side_effect = RuntimeError("locked")
+
+    await cleanup_pass(conn=conn, proxmox=proxmox)
+
+    row = conn.execute("SELECT * FROM runners WHERE id=1").fetchone()
+    assert row["state"] == "failed"
+    assert "locked" in row["last_error"]
