@@ -224,6 +224,36 @@ EOF
 )"
 }
 
+install_docker() {
+    log "installing Docker from upstream apt repo"
+
+    in_container "$(cat <<'EOF'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+cat > /etc/apt/sources.list.d/docker.list <<DOCKER
+deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${codename} stable
+DOCKER
+
+apt-get update
+apt-get install -y --no-install-recommends \
+    docker-ce docker-ce-cli containerd.io \
+    docker-buildx-plugin docker-compose-plugin
+
+systemctl enable docker
+
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EOF
+)"
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -235,6 +265,7 @@ main() {
     create_container
     wait_for_network
     install_base_packages
+    install_docker
 }
 
 main "$@"
