@@ -139,6 +139,32 @@ ensure_ubuntu_template() {
     UBUNTU_TEMPLATE_FILENAME="$available"
 }
 
+reset_vmid() {
+    if pct status "$TEMPLATE_VMID" >/dev/null 2>&1; then
+        log "destroying existing VMID ${TEMPLATE_VMID}"
+        pct stop "$TEMPLATE_VMID" --skiplock >/dev/null 2>&1 || true
+        pct destroy "$TEMPLATE_VMID" --purge --force
+    else
+        log "VMID ${TEMPLATE_VMID} is free"
+    fi
+}
+
+create_container() {
+    log "creating container ${TEMPLATE_VMID}"
+
+    pct create "$TEMPLATE_VMID" "local:vztmpl/${UBUNTU_TEMPLATE_FILENAME}" \
+        --hostname runner-template \
+        --storage "$STORAGE_POOL" \
+        --rootfs "${STORAGE_POOL}:32" \
+        --memory 2048 \
+        --cores 2 \
+        --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp" \
+        --features "nesting=1,keyctl=1" \
+        --unprivileged 0 \
+        --onboot 0 \
+        --start 1
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -146,6 +172,8 @@ main() {
     preflight
     self_install
     ensure_ubuntu_template
+    reset_vmid
+    create_container
 }
 
 main "$@"
