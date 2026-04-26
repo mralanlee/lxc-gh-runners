@@ -5,10 +5,6 @@
 #
 # Run as root on a Proxmox node. See template-builder/README.md.
 #
-# shellcheck disable=SC2034
-# Reason: configuration variables below are referenced by step functions
-# wired in across multiple tasks; SC2034 is a known false-positive here.
-
 set -euo pipefail
 
 # === Configuration ===========================================================
@@ -344,6 +340,16 @@ EOF
 )"
 }
 
+finalize() {
+    log "stopping container ${TEMPLATE_VMID}"
+    pct stop "$TEMPLATE_VMID"
+
+    log "converting ${TEMPLATE_VMID} to a template"
+    pct template "$TEMPLATE_VMID"
+
+    log "done — template ${TEMPLATE_VMID} built with runner ${RUNNER_VERSION}"
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -359,6 +365,7 @@ main() {
     create_runner_user
     install_runner_binary
     install_systemd_unit
+    finalize
 }
 
 main "$@"
