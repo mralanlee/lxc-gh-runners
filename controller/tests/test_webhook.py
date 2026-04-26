@@ -138,3 +138,24 @@ async def test_label_mismatch_is_ignored(app_and_conn, client):
     r = await _post(client, body, action="queued")
     assert r.status_code == 200
     assert conn.execute("SELECT * FROM runners WHERE job_id=99").fetchone() is None
+
+
+async def test_completed_then_in_progress_does_not_regress(app_and_conn, client):
+    _, conn = app_and_conn
+    queued = {
+        "action": "queued",
+        "workflow_job": {"id": 7, "labels": ["self-hosted", "lxc"]},
+        "repository": {"full_name": "myorg/repo"},
+    }
+    await _post(client, queued, action="queued")
+    # Manually mark cleaned (worker would do this normally).
+    conn.execute("UPDATE runners SET state='cleaned' WHERE job_id=7")
+    # Out-of-order in_progress arrives after the job is already cleaned up.
+    in_prog = {
+        "action": "in_progress",
+        "workflow_job": {"id": 7, "labels": ["self-hosted", "lxc"]},
+        "repository": {"full_name": "myorg/repo"},
+    }
+    await _post(client, in_prog, action="in_progress")
+    row = conn.execute("SELECT state FROM runners WHERE job_id=7").fetchone()
+    assert row["state"] == "cleaned"

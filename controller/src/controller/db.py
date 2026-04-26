@@ -58,7 +58,8 @@ def update_state_by_job_id(
     conn: sqlite3.Connection, *, job_id: int, new_state: str
 ) -> int:
     cur = conn.execute(
-        "UPDATE runners SET state=? WHERE job_id=?", (new_state, job_id)
+        "UPDATE runners SET state=? WHERE job_id=? AND state NOT IN ('cleaned', 'failed')",
+        (new_state, job_id),
     )
     return cur.rowcount
 

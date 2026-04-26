@@ -86,3 +86,19 @@ def test_audit_inserts_row(conn):
     assert row["event"] == "webhook_received"
     assert row["job_id"] == 42
     assert row["detail"] == "queued"
+
+
+def test_update_state_by_job_id_no_op_when_cleaned(conn):
+    db.insert_pending_runner(conn, job_id=42)
+    db.update_state_by_job_id(conn, job_id=42, new_state="cleaned")
+    n = db.update_state_by_job_id(conn, job_id=42, new_state="running")
+    assert n == 0
+    row = conn.execute("SELECT state FROM runners WHERE job_id=42").fetchone()
+    assert row["state"] == "cleaned"
+
+
+def test_update_state_by_job_id_no_op_when_failed(conn):
+    db.insert_pending_runner(conn, job_id=42)
+    db.update_state_by_job_id(conn, job_id=42, new_state="failed")
+    n = db.update_state_by_job_id(conn, job_id=42, new_state="running")
+    assert n == 0
