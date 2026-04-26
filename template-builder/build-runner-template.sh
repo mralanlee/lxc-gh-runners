@@ -181,6 +181,49 @@ wait_for_network() {
     exit 1
 }
 
+install_base_packages() {
+    log "installing base packages and Playwright system deps"
+
+    in_container "$(cat <<'EOF'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+apt-get install -y --no-install-recommends \
+    ca-certificates curl wget gnupg lsb-release \
+    git jq sudo \
+    build-essential pkg-config \
+    libssl-dev libyaml-dev
+
+# Playwright runtime libraries — Chromium + Firefox + WebKit on Ubuntu 24.04.
+# Source: github.com/microsoft/playwright (lib/server/registry/dependencies.ts).
+# Bump alongside Playwright support changes.
+apt-get install -y --no-install-recommends \
+    libnspr4 libnss3 libdbus-1-3 \
+    libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+    libgbm1 libxkbcommon0 \
+    libpango-1.0-0 libcairo2 libasound2t64 \
+    libdbus-glib-1-2 libxt6t64 \
+    gstreamer1.0-libav \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    libavif16 libenchant-2-2 libepoxy0 libevdev2 libgles2 \
+    libgstreamer-gl1.0-0 libgstreamer-plugins-base1.0-0 \
+    libgudev-1.0-0 libharfbuzz-icu0 libhyphen0 libicu74 \
+    libjpeg-turbo8 liblcms2-2 libmanette-0.2-0 \
+    libopenjp2-7 libopus0 libpng16-16t64 libsecret-1-0 \
+    libsoup-3.0-0 \
+    libwayland-client0 libwayland-egl1 libwayland-server0 \
+    libwebp7 libwebpdemux2 libwoff1 libx11-xcb1 libxml2
+
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EOF
+)"
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -191,6 +234,7 @@ main() {
     reset_vmid
     create_container
     wait_for_network
+    install_base_packages
 }
 
 main "$@"
