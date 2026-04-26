@@ -302,6 +302,48 @@ EOF
 )"
 }
 
+install_systemd_unit() {
+    log "installing /etc/runner.env placeholder + github-runner.service (not enabled)"
+
+    in_container "$(cat <<'EOF'
+set -euo pipefail
+
+cat > /etc/runner.env <<'ENV'
+# Populated by the provisioner after `pct clone`.
+JITCONFIG=
+ENV
+chown root:runner /etc/runner.env
+chmod 0640 /etc/runner.env
+
+cat > /etc/systemd/system/github-runner.service <<'UNIT'
+[Unit]
+Description=GitHub Actions Runner
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=runner
+WorkingDirectory=/opt/runner
+EnvironmentFile=/etc/runner.env
+ExecStart=/opt/runner/run.sh --jitconfig ${JITCONFIG}
+Restart=on-failure
+RestartSec=10
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+# Intentionally NOT enabled — provisioner enables after writing JITCONFIG.
+EOF
+)"
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -316,6 +358,7 @@ main() {
     install_docker
     create_runner_user
     install_runner_binary
+    install_systemd_unit
 }
 
 main "$@"
