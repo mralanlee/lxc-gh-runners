@@ -20,8 +20,8 @@ UBUNTU_VERSION="${UBUNTU_VERSION:-24.04}"
 
 # Pinned GitHub Actions runner. Bump both together via PR.
 # Latest releases: https://github.com/actions/runner/releases
-RUNNER_VERSION="0.0.0"   # set in Task 10
-RUNNER_SHA256="0000000000000000000000000000000000000000000000000000000000000000"  # set in Task 10
+RUNNER_VERSION="2.334.0"
+RUNNER_SHA256="048024cd2c848eb6f14d5646d56c13a4def2ae7ee3ad12122bee960c56f3d271"
 
 # Self-install paths
 INSTALL_PATH="/usr/local/sbin/build-runner-template.sh"
@@ -275,6 +275,33 @@ EOF
 )"
 }
 
+install_runner_binary() {
+    log "installing runner ${RUNNER_VERSION}"
+
+    in_container "$(cat <<EOF
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+mkdir -p /opt/runner
+cd /opt/runner
+
+curl -fsSLo runner.tar.gz \
+    "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+
+echo "${RUNNER_SHA256}  runner.tar.gz" | sha256sum -c -
+
+tar xzf runner.tar.gz
+rm runner.tar.gz
+
+chown -R runner:runner /opt/runner
+
+# installdependencies.sh pulls libicu and a few other runtime libs the
+# runner needs — idempotent against what we already installed.
+./bin/installdependencies.sh
+EOF
+)"
+}
+
 # === Entrypoint ==============================================================
 
 main() {
@@ -288,6 +315,7 @@ main() {
     install_base_packages
     install_docker
     create_runner_user
+    install_runner_binary
 }
 
 main "$@"
