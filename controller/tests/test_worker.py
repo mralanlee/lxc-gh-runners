@@ -128,6 +128,58 @@ async def test_cleanup_pass_marks_failed_on_error(conn, proxmox):
     assert "locked" in row["last_error"]
 
 
+async def test_cleanup_pass_destroys_failed_with_vmid(conn, proxmox):
+    db.insert_pending_runner(conn, job_id=1)
+    db.update_state_by_id(conn, runner_id=1, new_state="failed", vmid=9100, last_error="exec timeout")
+
+    await cleanup_pass(conn=conn, proxmox=proxmox)
+
+    proxmox.stop.assert_called_once_with(vmid=9100)
+    proxmox.destroy.assert_called_once_with(vmid=9100)
+    row = conn.execute("SELECT * FROM runners WHERE id=1").fetchone()
+    assert row["state"] == "failed"
+    assert row["cleaned_at"] is not None
+    assert row["last_error"] == "exec timeout"
+
+
+async def test_cleanup_pass_skips_failed_without_vmid(conn, proxmox):
+    db.insert_pending_runner(conn, job_id=1)
+    db.update_state_by_id(conn, runner_id=1, new_state="failed", last_error="early failure")
+
+    await cleanup_pass(conn=conn, proxmox=proxmox)
+
+    proxmox.stop.assert_not_called()
+    proxmox.destroy.assert_not_called()
+
+
+async def test_cleanup_pass_skips_failed_already_cleaned(conn, proxmox):
+    from datetime import datetime, timezone
+    db.insert_pending_runner(conn, job_id=1)
+    db.update_state_by_id(
+        conn, runner_id=1, new_state="failed", vmid=9100,
+        cleaned_at=datetime.now(timezone.utc),
+    )
+
+    await cleanup_pass(conn=conn, proxmox=proxmox)
+
+    proxmox.stop.assert_not_called()
+    proxmox.destroy.assert_not_called()
+
+
+async def test_cleanup_pass_persistent_failure_keeps_row_failed_not_regressed(conn, proxmox):
+    db.insert_pending_runner(conn, job_id=1)
+    db.update_state_by_id(conn, runner_id=1, new_state="failed", vmid=9100, last_error="orig")
+    proxmox.stop.side_effect = RuntimeError("locked")
+
+    await cleanup_pass(conn=conn, proxmox=proxmox)
+
+    row = conn.execute("SELECT * FROM runners WHERE id=1").fetchone()
+    # Row stays failed, no regression from the failed-already case
+    assert row["state"] == "failed"
+    assert row["cleaned_at"] is None
+    assert row["last_error"] == "orig"  # unchanged
+
+
 async def test_run_loop_calls_passes_then_sleeps(conn, proxmox, github_client, monkeypatch):
     sleeps: list[float] = []
 

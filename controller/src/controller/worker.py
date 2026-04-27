@@ -77,27 +77,38 @@ async def _spawn_one(
 
 
 async def cleanup_pass(*, conn, proxmox) -> None:
-    rows = db.select_by_state(conn, "completed")
+    rows = conn.execute(
+        "SELECT * FROM runners "
+        "WHERE vmid IS NOT NULL AND cleaned_at IS NULL "
+        "AND state IN ('completed', 'failed')"
+    ).fetchall()
     for row in rows:
         runner_id = row["id"]
         vmid = row["vmid"]
         job_id = row["job_id"]
+        original_state = row["state"]
         try:
-            if vmid is not None:
-                proxmox.stop(vmid=vmid)
-                proxmox.destroy(vmid=vmid)
+            proxmox.stop(vmid=vmid)
+            proxmox.destroy(vmid=vmid)
+            terminal_state = "cleaned" if original_state == "completed" else "failed"
             db.update_state_by_id(
                 conn,
                 runner_id=runner_id,
-                new_state="cleaned",
+                new_state=terminal_state,
                 cleaned_at=datetime.now(timezone.utc),
             )
             db.audit(conn, event="cleanup_succeeded", job_id=job_id, vmid=vmid)
         except Exception as e:
-            log.exception("cleanup failed for job_id=%s vmid=%s", job_id, vmid)
-            db.update_state_by_id(
-                conn, runner_id=runner_id, new_state="failed", last_error=str(e)
+            log.exception(
+                "cleanup failed for job_id=%s vmid=%s state=%s",
+                job_id, vmid, original_state,
             )
+            # Only regress completed → failed on first error. On a row that's
+            # already failed, leave the row alone and let the next tick retry.
+            if original_state == "completed":
+                db.update_state_by_id(
+                    conn, runner_id=runner_id, new_state="failed", last_error=str(e)
+                )
             db.audit(
                 conn, event="cleanup_failed", job_id=job_id, vmid=vmid, detail=str(e)
             )
