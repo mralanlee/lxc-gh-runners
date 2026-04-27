@@ -23,6 +23,7 @@ RUNNER_SHA256="048024cd2c848eb6f14d5646d56c13a4def2ae7ee3ad12122bee960c56f3d271"
 INSTALL_PATH="/usr/local/sbin/build-runner-template.sh"
 CRON_PATH="/etc/cron.d/build-runner-template"
 CRON_SCHEDULE="0 3 1 */3 *"   # 03:00 on day 1 of Jan/Apr/Jul/Oct
+SCRIPT_URL="https://raw.githubusercontent.com/mralanlee/lxc-gh-runners/main/template-builder/build-runner-template.sh"
 
 # Resolved by ensure_ubuntu_template().
 UBUNTU_TEMPLATE_FILENAME=""
@@ -81,11 +82,19 @@ preflight() {
 
 self_install() {
     local src
-    src="$(readlink -f "$0")"
+    src="$(readlink -f "$0" 2>/dev/null || true)"
 
-    if [[ "$src" != "$INSTALL_PATH" ]]; then
+    if [[ "$src" == "$INSTALL_PATH" ]]; then
+        : # Already running from the install path; nothing to copy.
+    elif [[ -f "$src" ]]; then
         log "installing self to ${INSTALL_PATH}"
         install -m 0755 "$src" "$INSTALL_PATH"
+    else
+        # Invoked via stdin (e.g. `curl ... | bash`); $0 is "bash", not a file.
+        # Pull a fresh copy from the canonical URL.
+        log "installing from ${SCRIPT_URL} to ${INSTALL_PATH}"
+        curl -fsSLo "$INSTALL_PATH" "$SCRIPT_URL"
+        chmod 0755 "$INSTALL_PATH"
     fi
 
     log "writing cron entry to ${CRON_PATH}"
