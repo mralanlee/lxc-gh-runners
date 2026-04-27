@@ -128,16 +128,31 @@ async def test_completed_updates_state(app_and_conn, client):
     assert row["state"] == "completed"
 
 
-async def test_label_mismatch_is_ignored(app_and_conn, client):
+async def test_self_hosted_only_job_is_ignored(app_and_conn, client):
+    """A bare self-hosted job is not ours — could belong to another runner pool."""
     _, conn = app_and_conn
     body = {
         "action": "queued",
-        "workflow_job": {"id": 99, "labels": ["self-hosted", "windows"]},
+        "workflow_job": {"id": 201, "labels": ["self-hosted"]},
         "repository": {"full_name": "myorg/repo"},
     }
     r = await _post(client, body, action="queued")
     assert r.status_code == 200
-    assert conn.execute("SELECT * FROM runners WHERE job_id=99").fetchone() is None
+    assert conn.execute("SELECT * FROM runners WHERE job_id=201").fetchone() is None
+
+
+async def test_job_with_extra_labels_is_processed(app_and_conn, client):
+    """Job opts in to our fleet by including all RUNNER_LABELS; extra labels OK."""
+    _, conn = app_and_conn
+    body = {
+        "action": "queued",
+        "workflow_job": {"id": 200, "labels": ["self-hosted", "lxc", "gpu"]},
+        "repository": {"full_name": "myorg/repo"},
+    }
+    r = await _post(client, body, action="queued")
+    assert r.status_code == 200
+    row = conn.execute("SELECT * FROM runners WHERE job_id=200").fetchone()
+    assert row is not None
 
 
 async def test_completed_then_in_progress_does_not_regress(app_and_conn, client):

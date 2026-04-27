@@ -34,6 +34,10 @@ The LXC at `TEMPLATE_VMID` must:
 
 See `.env.example`.
 
+### Label matching
+
+The controller picks up a `workflow_job` only when **every** label in `RUNNER_LABELS` is present in the job's `runs-on:` list. With `RUNNER_LABELS=self-hosted,lxc`, a workflow needs `runs-on: [self-hosted, lxc]` (or a superset) to be handled here. Jobs that request only `runs-on: self-hosted` are deliberately ignored so they don't hijack other self-hosted runner pools you may operate.
+
 ## Tests
 
 ```bash

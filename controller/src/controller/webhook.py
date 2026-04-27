@@ -26,7 +26,7 @@ def build_router(*, conn: sqlite3.Connection, secret: str, runner_labels: list[s
         job_id = job.get("id")
         labels = set(job.get("labels", []))
         action = payload.get("action")
-        if not labels.issubset(label_set):
+        if not label_set.issubset(labels):
             return {"ok": True, "ignored": "labels"}
         if not job_id or not action:
             return {"ok": True, "ignored": "missing fields"}
