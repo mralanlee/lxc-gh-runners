@@ -62,9 +62,9 @@ preflight() {
     fi
 
     local cmd
-    for cmd in pct pveam pvesm; do
+    for cmd in pct pveam pvesm pvesh jq; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
-            log "required command not found: ${cmd}"
+            log "required command not found: ${cmd} (try: apt install ${cmd})"
             exit 1
         fi
     done
@@ -145,13 +145,29 @@ ensure_ubuntu_template() {
 }
 
 reset_vmid() {
-    if pct status "$TEMPLATE_VMID" >/dev/null 2>&1; then
-        log "destroying existing VMID ${TEMPLATE_VMID}"
-        pct stop "$TEMPLATE_VMID" --skiplock >/dev/null 2>&1 || true
-        pct destroy "$TEMPLATE_VMID" --purge --force
-    else
-        log "VMID ${TEMPLATE_VMID} is free"
+    # VMIDs are unique cluster-wide; pct only manages the local node, so a
+    # local-only check (pct status) is wrong in a clustered Proxmox setup.
+    local existing_node local_node
+    local_node="$(hostname)"
+    existing_node="$(pvesh get /cluster/resources --type vm --output-format json 2>/dev/null \
+        | jq -r --argjson vmid "$TEMPLATE_VMID" \
+            '.[] | select(.vmid == $vmid) | .node' \
+        | head -n1)"
+
+    if [[ -z "$existing_node" ]]; then
+        log "VMID ${TEMPLATE_VMID} is free cluster-wide"
+        return
     fi
+
+    if [[ "$existing_node" != "$local_node" ]]; then
+        log "VMID ${TEMPLATE_VMID} already exists on node '${existing_node}' (this node is '${local_node}')"
+        log "destroy it there first, or set TEMPLATE_VMID to a different ID for this node"
+        exit 1
+    fi
+
+    log "destroying existing VMID ${TEMPLATE_VMID} on this node"
+    pct stop "$TEMPLATE_VMID" --skiplock >/dev/null 2>&1 || true
+    pct destroy "$TEMPLATE_VMID" --purge --force
 }
 
 create_container() {
