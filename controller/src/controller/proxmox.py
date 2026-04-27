@@ -30,6 +30,22 @@ class ProxmoxClient:
     def _lxc(self, vmid: int):
         return self._api.nodes(self._node).lxc(str(vmid))
 
+    def _wait_task(self, upid: str, *, timeout: float = 120.0, interval: float = 0.5) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status = self._api.nodes(self._node).tasks(upid).status.get()
+            if status.get("status") == "stopped":
+                exit_status = status.get("exitstatus", "")
+                if exit_status != "OK":
+                    raise RuntimeError(
+                        f"proxmox task {upid} failed: exitstatus={exit_status!r}"
+                    )
+                return
+            time.sleep(interval)
+        raise TimeoutError(
+            f"proxmox task {upid} did not complete within {timeout}s"
+        )
+
     def list_lxcs_in_range(self, *, start: int, end: int) -> list[int]:
         all_lxcs = self._node_lxc().get()
         return [
@@ -46,7 +62,8 @@ class ProxmoxClient:
         raise RuntimeError(f"no free VMID in range {start}-{end}")
 
     def clone(self, *, template_vmid: int, new_vmid: int) -> None:
-        self._lxc(template_vmid).clone.post(newid=new_vmid)
+        upid = self._lxc(template_vmid).clone.post(newid=new_vmid)
+        self._wait_task(upid)
 
     def set_description(self, *, vmid: int, description: str) -> None:
         self._lxc(vmid).config.put(description=description)
@@ -56,13 +73,16 @@ class ProxmoxClient:
         return cfg.get("description", "")
 
     def start(self, *, vmid: int) -> None:
-        self._lxc(vmid).status.start.post()
+        upid = self._lxc(vmid).status.start.post()
+        self._wait_task(upid)
 
     def stop(self, *, vmid: int) -> None:
-        self._lxc(vmid).status.stop.post()
+        upid = self._lxc(vmid).status.stop.post()
+        self._wait_task(upid)
 
     def destroy(self, *, vmid: int) -> None:
-        self._lxc(vmid).delete()
+        upid = self._lxc(vmid).delete()
+        self._wait_task(upid)
 
     def get_status(self, *, vmid: int) -> str:
         return self._lxc(vmid).status.current.get()["status"]

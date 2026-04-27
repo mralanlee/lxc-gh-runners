@@ -10,6 +10,16 @@ from controller.proxmox import ProxmoxClient
 def fake_api():
     """Build a MagicMock shaped like proxmoxer's ProxmoxAPI."""
     api = MagicMock()
+    # Task-returning operations return a fake UPID
+    api.nodes.return_value.lxc.return_value.clone.post.return_value = "UPID:fake"
+    api.nodes.return_value.lxc.return_value.status.start.post.return_value = "UPID:fake"
+    api.nodes.return_value.lxc.return_value.status.stop.post.return_value = "UPID:fake"
+    api.nodes.return_value.lxc.return_value.delete.return_value = "UPID:fake"
+    # Default: any task we wait on is already stopped + OK
+    api.nodes.return_value.tasks.return_value.status.get.return_value = {
+        "status": "stopped",
+        "exitstatus": "OK",
+    }
     return api
 
 
@@ -169,3 +179,55 @@ def test_exec_raises_if_ssh_host_not_configured(fake_api, monkeypatch):
     bare_client = ProxmoxClient(api=fake_api, node="pve")  # no ssh_host
     with pytest.raises(RuntimeError, match="ssh_host"):
         bare_client.exec(vmid=9100, cmd=["echo"])
+
+
+def test_wait_task_polls_until_stopped(client, fake_api, monkeypatch):
+    statuses = iter([
+        {"status": "running"},
+        {"status": "stopped", "exitstatus": "OK"},
+    ])
+    fake_api.nodes.return_value.tasks.return_value.status.get.side_effect = (
+        lambda: next(statuses)
+    )
+    sleeps = []
+    monkeypatch.setattr("controller.proxmox.time.sleep", lambda s: sleeps.append(s))
+    client._wait_task("UPID:test", timeout=5.0, interval=0.1)
+    assert len(sleeps) == 1
+
+
+def test_wait_task_raises_on_non_ok_exitstatus(client, fake_api, monkeypatch):
+    fake_api.nodes.return_value.tasks.return_value.status.get.return_value = {
+        "status": "stopped",
+        "exitstatus": "command 'pct clone' failed",
+    }
+    monkeypatch.setattr("controller.proxmox.time.sleep", lambda s: None)
+    with pytest.raises(RuntimeError, match="failed"):
+        client._wait_task("UPID:test")
+
+
+def test_wait_task_times_out(client, fake_api, monkeypatch):
+    fake_api.nodes.return_value.tasks.return_value.status.get.return_value = {
+        "status": "running"
+    }
+    monkeypatch.setattr("controller.proxmox.time.sleep", lambda s: None)
+    times = iter([0.0, 0.05, 0.1, 0.2, 0.5, 1.0])
+    monkeypatch.setattr("controller.proxmox.time.monotonic", lambda: next(times))
+    with pytest.raises(TimeoutError):
+        client._wait_task("UPID:test", timeout=0.1, interval=0.05)
+
+
+def test_clone_waits_for_task_completion(client, fake_api):
+    client.clone(template_vmid=9000, new_vmid=9100)
+    fake_api.nodes.return_value.lxc.return_value.clone.post.assert_called_once_with(
+        newid=9100
+    )
+    fake_api.nodes.return_value.tasks.return_value.status.get.assert_called()
+
+
+def test_clone_raises_when_task_fails(client, fake_api):
+    fake_api.nodes.return_value.tasks.return_value.status.get.return_value = {
+        "status": "stopped",
+        "exitstatus": "destination already in use",
+    }
+    with pytest.raises(RuntimeError, match="already in use"):
+        client.clone(template_vmid=9000, new_vmid=9100)
