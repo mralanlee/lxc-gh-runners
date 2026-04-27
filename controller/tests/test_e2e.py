@@ -1,11 +1,9 @@
-import asyncio
 import hashlib
 import hmac
 import json
 import sqlite3
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
@@ -28,17 +26,17 @@ async def test_full_lifecycle():
 
     app = FastAPI()
     app.include_router(
-        webhook.build_router(
-            conn=conn, secret="s", runner_labels=["self-hosted", "lxc"]
-        )
+        webhook.build_router(conn=conn, secret="s", runner_labels=["self-hosted", "lxc"])
     )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-        body = json.dumps({
-            "action": "queued",
-            "workflow_job": {"id": 100, "labels": ["self-hosted", "lxc"]},
-            "repository": {"full_name": "myorg/repo"},
-        }).encode()
+        body = json.dumps(
+            {
+                "action": "queued",
+                "workflow_job": {"id": 100, "labels": ["self-hosted", "lxc"]},
+                "repository": {"full_name": "myorg/repo"},
+            }
+        ).encode()
         r = await client.post(
             "/webhook/github",
             content=body,
@@ -47,8 +45,12 @@ async def test_full_lifecycle():
         assert r.status_code == 200
 
         await worker.spawn_pass(
-            conn=conn, proxmox=proxmox, github=github_client,
-            cap=3, template_vmid=9000, vmid_range=(9100, 9199),
+            conn=conn,
+            proxmox=proxmox,
+            github=github_client,
+            cap=3,
+            template_vmid=9000,
+            vmid_range=(9100, 9199),
             runner_labels=["self-hosted", "lxc"],
         )
 
@@ -56,11 +58,13 @@ async def test_full_lifecycle():
         assert row["state"] == "running"
         assert row["vmid"] == 9100
 
-        body2 = json.dumps({
-            "action": "completed",
-            "workflow_job": {"id": 100, "labels": ["self-hosted", "lxc"]},
-            "repository": {"full_name": "myorg/repo"},
-        }).encode()
+        body2 = json.dumps(
+            {
+                "action": "completed",
+                "workflow_job": {"id": 100, "labels": ["self-hosted", "lxc"]},
+                "repository": {"full_name": "myorg/repo"},
+            }
+        ).encode()
         r = await client.post(
             "/webhook/github",
             content=body2,

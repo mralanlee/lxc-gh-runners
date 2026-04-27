@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -57,9 +56,7 @@ def test_allocate_vmid_raises_when_full(client, fake_api):
 
 def test_clone_calls_api(client, fake_api):
     client.clone(template_vmid=9000, new_vmid=9100)
-    fake_api.nodes.return_value.lxc.return_value.clone.post.assert_called_once_with(
-        newid=9100
-    )
+    fake_api.nodes.return_value.lxc.return_value.clone.post.assert_called_once_with(newid=9100)
 
 
 def test_set_description_calls_config(client, fake_api):
@@ -117,8 +114,8 @@ def test_get_create_time_raises_when_no_started_at(client, fake_api):
 
 def test_wait_until_ready_polls_status(client, fake_api, monkeypatch):
     statuses = iter([{"status": "stopped"}, {"status": "running"}])
-    fake_api.nodes.return_value.lxc.return_value.status.current.get.side_effect = (
-        lambda: next(statuses)
+    fake_api.nodes.return_value.lxc.return_value.status.current.get.side_effect = lambda: next(
+        statuses
     )
     sleeps = []
     monkeypatch.setattr("controller.proxmox.time.sleep", lambda s: sleeps.append(s))
@@ -140,9 +137,7 @@ def test_wait_until_ready_times_out(client, fake_api, monkeypatch):
 
 def test_exec_returns_stdout_stderr_exit_code(client, monkeypatch):
     completed = MagicMock(stdout="JITCONFIG written\n", stderr="", returncode=0)
-    monkeypatch.setattr(
-        "controller.proxmox.subprocess.run", lambda *a, **kw: completed
-    )
+    monkeypatch.setattr("controller.proxmox.subprocess.run", lambda *a, **kw: completed)
     out, err, code = client.exec(vmid=9100, cmd=["sh", "-c", "echo hi"])
     assert "written" in out
     assert err == ""
@@ -151,18 +146,18 @@ def test_exec_returns_stdout_stderr_exit_code(client, monkeypatch):
 
 def test_exec_raises_on_nonzero(client, monkeypatch):
     completed = MagicMock(stdout="", stderr="boom\n", returncode=1)
-    monkeypatch.setattr(
-        "controller.proxmox.subprocess.run", lambda *a, **kw: completed
-    )
+    monkeypatch.setattr("controller.proxmox.subprocess.run", lambda *a, **kw: completed)
     with pytest.raises(RuntimeError, match="exit_code=1"):
         client.exec(vmid=9100, cmd=["false"])
 
 
 def test_exec_builds_ssh_command_correctly(client, monkeypatch):
     captured = {}
+
     def fake_run(args, **kwargs):
         captured["args"] = args
         return MagicMock(stdout="", stderr="", returncode=0)
+
     monkeypatch.setattr("controller.proxmox.subprocess.run", fake_run)
     client.exec(vmid=9100, cmd=["sh", "-c", "echo hi"])
     args = captured["args"]
@@ -182,13 +177,13 @@ def test_exec_raises_if_ssh_host_not_configured(fake_api, monkeypatch):
 
 
 def test_wait_task_polls_until_stopped(client, fake_api, monkeypatch):
-    statuses = iter([
-        {"status": "running"},
-        {"status": "stopped", "exitstatus": "OK"},
-    ])
-    fake_api.nodes.return_value.tasks.return_value.status.get.side_effect = (
-        lambda: next(statuses)
+    statuses = iter(
+        [
+            {"status": "running"},
+            {"status": "stopped", "exitstatus": "OK"},
+        ]
     )
+    fake_api.nodes.return_value.tasks.return_value.status.get.side_effect = lambda: next(statuses)
     sleeps = []
     monkeypatch.setattr("controller.proxmox.time.sleep", lambda s: sleeps.append(s))
     client._wait_task("UPID:test", timeout=5.0, interval=0.1)
@@ -206,9 +201,7 @@ def test_wait_task_raises_on_non_ok_exitstatus(client, fake_api, monkeypatch):
 
 
 def test_wait_task_times_out(client, fake_api, monkeypatch):
-    fake_api.nodes.return_value.tasks.return_value.status.get.return_value = {
-        "status": "running"
-    }
+    fake_api.nodes.return_value.tasks.return_value.status.get.return_value = {"status": "running"}
     monkeypatch.setattr("controller.proxmox.time.sleep", lambda s: None)
     times = iter([0.0, 0.05, 0.1, 0.2, 0.5, 1.0])
     monkeypatch.setattr("controller.proxmox.time.monotonic", lambda: next(times))
@@ -218,9 +211,7 @@ def test_wait_task_times_out(client, fake_api, monkeypatch):
 
 def test_clone_waits_for_task_completion(client, fake_api):
     client.clone(template_vmid=9000, new_vmid=9100)
-    fake_api.nodes.return_value.lxc.return_value.clone.post.assert_called_once_with(
-        newid=9100
-    )
+    fake_api.nodes.return_value.lxc.return_value.clone.post.assert_called_once_with(newid=9100)
     fake_api.nodes.return_value.tasks.return_value.status.get.assert_called()
 
 

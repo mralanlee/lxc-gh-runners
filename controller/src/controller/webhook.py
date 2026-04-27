@@ -33,7 +33,12 @@ def build_router(*, conn: sqlite3.Connection, secret: str, runner_labels: list[s
         if action == "queued":
             repo = (payload.get("repository") or {}).get("full_name")
             inserted = db.insert_pending_runner(conn, job_id=job_id, repo=repo)
-            db.audit(conn, event="webhook_queued", job_id=job_id, detail="duplicate" if inserted is None else None)
+            db.audit(
+                conn,
+                event="webhook_queued",
+                job_id=job_id,
+                detail="duplicate" if inserted is None else None,
+            )
         elif action == "in_progress":
             db.update_state_by_job_id(conn, job_id=job_id, new_state="running")
             db.audit(conn, event="webhook_in_progress", job_id=job_id)

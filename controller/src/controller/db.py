@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runners (
@@ -54,9 +54,7 @@ def insert_pending_runner(
         return None
 
 
-def update_state_by_job_id(
-    conn: sqlite3.Connection, *, job_id: int, new_state: str
-) -> int:
+def update_state_by_job_id(conn: sqlite3.Connection, *, job_id: int, new_state: str) -> int:
     cur = conn.execute(
         "UPDATE runners SET state=? WHERE job_id=? AND state NOT IN ('cleaned', 'failed')",
         (new_state, job_id),
@@ -85,9 +83,7 @@ def update_state_by_id(
         sets.append("cleaned_at=?")
         args.append(cleaned_at.isoformat())
     args.append(runner_id)
-    cur = conn.execute(
-        f"UPDATE runners SET {', '.join(sets)} WHERE id=?", args
-    )
+    cur = conn.execute(f"UPDATE runners SET {', '.join(sets)} WHERE id=?", args)
     return cur.rowcount
 
 
@@ -108,9 +104,7 @@ def select_pending(conn: sqlite3.Connection, *, limit: int) -> list[sqlite3.Row]
 
 
 def select_by_state(conn: sqlite3.Connection, state: str) -> list[sqlite3.Row]:
-    return conn.execute(
-        "SELECT * FROM runners WHERE state=? ORDER BY id", (state,)
-    ).fetchall()
+    return conn.execute("SELECT * FROM runners WHERE state=? ORDER BY id", (state,)).fetchall()
 
 
 def select_active_with_vmid(conn: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -122,9 +116,7 @@ def select_active_with_vmid(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def select_state_counts(conn: sqlite3.Connection) -> dict[str, int]:
-    rows = conn.execute(
-        "SELECT state, COUNT(*) AS c FROM runners GROUP BY state"
-    ).fetchall()
+    rows = conn.execute("SELECT state, COUNT(*) AS c FROM runners GROUP BY state").fetchall()
     return {r["state"]: r["c"] for r in rows}
 
 
@@ -132,9 +124,7 @@ def select_audit(
     conn: sqlite3.Connection, *, job_id: int | None = None, limit: int = 100
 ) -> list[sqlite3.Row]:
     if job_id is None:
-        return conn.execute(
-            "SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
+        return conn.execute("SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return conn.execute(
         "SELECT * FROM audit WHERE job_id=? ORDER BY id DESC LIMIT ?",
         (job_id, limit),

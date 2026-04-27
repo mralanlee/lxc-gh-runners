@@ -24,9 +24,7 @@ def app_and_conn():
 
     app = FastAPI()
     app.include_router(
-        build_router(
-            conn=conn, secret="test-secret", runner_labels=["self-hosted", "lxc"]
-        )
+        build_router(conn=conn, secret="test-secret", runner_labels=["self-hosted", "lxc"])
     )
     return app, conn
 

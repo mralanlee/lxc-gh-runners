@@ -60,7 +60,9 @@ async def lifespan(app: FastAPI):
 
     worker_task = asyncio.create_task(
         worker.run(
-            conn=conn, proxmox=proxmox_client, github=github_client,
+            conn=conn,
+            proxmox=proxmox_client,
+            github=github_client,
             cap=settings.max_concurrent_runners,
             template_vmid=settings.template_vmid,
             vmid_range=(settings.runner_vmid_range_start, settings.runner_vmid_range_end),
@@ -69,7 +71,9 @@ async def lifespan(app: FastAPI):
     )
     reconciler_task = asyncio.create_task(
         reconciler.run(
-            conn=conn, proxmox=proxmox_client, github=github_client,
+            conn=conn,
+            proxmox=proxmox_client,
+            github=github_client,
             vmid_range=(settings.runner_vmid_range_start, settings.runner_vmid_range_end),
             max_job_duration=timedelta(hours=settings.max_job_duration_hours),
         )

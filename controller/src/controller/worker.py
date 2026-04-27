@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from controller import db
 
@@ -34,24 +34,18 @@ async def spawn_pass(
         )
 
 
-async def _spawn_one(
-    *, conn, proxmox, github, row, template_vmid, vmid_range, runner_labels
-):
+async def _spawn_one(*, conn, proxmox, github, row, template_vmid, vmid_range, runner_labels):
     runner_id = row["id"]
     job_id = row["job_id"]
     db.update_state_by_id(conn, runner_id=runner_id, new_state="spawning")
     db.audit(conn, event="spawn_started", job_id=job_id)
     vmid: int | None = None
     try:
-        jit = await github.generate_jit_config(
-            name=f"runner-{job_id}", labels=runner_labels
-        )
+        jit = await github.generate_jit_config(name=f"runner-{job_id}", labels=runner_labels)
         vmid = proxmox.allocate_vmid(start=vmid_range[0], end=vmid_range[1])
         proxmox.clone(template_vmid=template_vmid, new_vmid=vmid)
-        now_iso = datetime.now(timezone.utc).isoformat()
-        proxmox.set_description(
-            vmid=vmid, description=f"job_id={job_id} started_at={now_iso}"
-        )
+        now_iso = datetime.now(UTC).isoformat()
+        proxmox.set_description(vmid=vmid, description=f"job_id={job_id} started_at={now_iso}")
         db.update_state_by_id(conn, runner_id=runner_id, new_state="spawning", vmid=vmid)
         proxmox.start(vmid=vmid)
         proxmox.wait_until_ready(vmid=vmid)
@@ -71,9 +65,7 @@ async def _spawn_one(
         db.update_state_by_id(
             conn, runner_id=runner_id, new_state="failed", last_error=str(e), vmid=vmid
         )
-        db.audit(
-            conn, event="spawn_failed", job_id=job_id, vmid=vmid, detail=str(e)
-        )
+        db.audit(conn, event="spawn_failed", job_id=job_id, vmid=vmid, detail=str(e))
 
 
 async def cleanup_pass(*, conn, proxmox) -> None:
@@ -95,13 +87,15 @@ async def cleanup_pass(*, conn, proxmox) -> None:
                 conn,
                 runner_id=runner_id,
                 new_state=terminal_state,
-                cleaned_at=datetime.now(timezone.utc),
+                cleaned_at=datetime.now(UTC),
             )
             db.audit(conn, event="cleanup_succeeded", job_id=job_id, vmid=vmid)
         except Exception as e:
             log.exception(
                 "cleanup failed for job_id=%s vmid=%s state=%s",
-                job_id, vmid, original_state,
+                job_id,
+                vmid,
+                original_state,
             )
             # Only regress completed → failed on first error. On a row that's
             # already failed, leave the row alone and let the next tick retry.
@@ -109,9 +103,7 @@ async def cleanup_pass(*, conn, proxmox) -> None:
                 db.update_state_by_id(
                     conn, runner_id=runner_id, new_state="failed", last_error=str(e)
                 )
-            db.audit(
-                conn, event="cleanup_failed", job_id=job_id, vmid=vmid, detail=str(e)
-            )
+            db.audit(conn, event="cleanup_failed", job_id=job_id, vmid=vmid, detail=str(e))
 
 
 async def run(
@@ -128,8 +120,12 @@ async def run(
     while True:
         try:
             await spawn_pass(
-                conn=conn, proxmox=proxmox, github=github,
-                cap=cap, template_vmid=template_vmid, vmid_range=vmid_range,
+                conn=conn,
+                proxmox=proxmox,
+                github=github,
+                cap=cap,
+                template_vmid=template_vmid,
+                vmid_range=vmid_range,
                 runner_labels=runner_labels,
             )
             await cleanup_pass(conn=conn, proxmox=proxmox)

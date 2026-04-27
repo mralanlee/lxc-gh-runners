@@ -1,12 +1,12 @@
 import asyncio
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from controller import db
-from controller.worker import spawn_pass, cleanup_pass
+from controller.worker import cleanup_pass, spawn_pass
 
 
 @pytest.fixture
@@ -38,8 +38,12 @@ async def test_spawn_pass_does_nothing_when_at_cap(conn, proxmox, github_client)
     db.insert_pending_runner(conn, job_id=2)
 
     await spawn_pass(
-        conn=conn, proxmox=proxmox, github=github_client,
-        cap=1, template_vmid=9000, vmid_range=(9100, 9199),
+        conn=conn,
+        proxmox=proxmox,
+        github=github_client,
+        cap=1,
+        template_vmid=9000,
+        vmid_range=(9100, 9199),
         runner_labels=["self-hosted", "lxc"],
     )
     proxmox.clone.assert_not_called()
@@ -49,8 +53,12 @@ async def test_spawn_pass_happy_path(conn, proxmox, github_client):
     db.insert_pending_runner(conn, job_id=42)
 
     await spawn_pass(
-        conn=conn, proxmox=proxmox, github=github_client,
-        cap=3, template_vmid=9000, vmid_range=(9100, 9199),
+        conn=conn,
+        proxmox=proxmox,
+        github=github_client,
+        cap=3,
+        template_vmid=9000,
+        vmid_range=(9100, 9199),
         runner_labels=["self-hosted", "lxc"],
     )
 
@@ -70,8 +78,12 @@ async def test_spawn_pass_marks_failed_on_exception(conn, proxmox, github_client
     proxmox.clone.side_effect = RuntimeError("boom")
 
     await spawn_pass(
-        conn=conn, proxmox=proxmox, github=github_client,
-        cap=3, template_vmid=9000, vmid_range=(9100, 9199),
+        conn=conn,
+        proxmox=proxmox,
+        github=github_client,
+        cap=3,
+        template_vmid=9000,
+        vmid_range=(9100, 9199),
         runner_labels=["self-hosted", "lxc"],
     )
 
@@ -88,17 +100,21 @@ async def test_spawn_pass_processes_only_up_to_slots(conn, proxmox, github_clien
     proxmox.allocate_vmid.side_effect = [9100, 9101, 9102]
 
     await spawn_pass(
-        conn=conn, proxmox=proxmox, github=github_client,
-        cap=3, template_vmid=9000, vmid_range=(9100, 9199),
+        conn=conn,
+        proxmox=proxmox,
+        github=github_client,
+        cap=3,
+        template_vmid=9000,
+        vmid_range=(9100, 9199),
         runner_labels=["self-hosted", "lxc"],
     )
 
-    running = conn.execute(
-        "SELECT COUNT(*) AS c FROM runners WHERE state='running'"
-    ).fetchone()["c"]
-    pending = conn.execute(
-        "SELECT COUNT(*) AS c FROM runners WHERE state='pending'"
-    ).fetchone()["c"]
+    running = conn.execute("SELECT COUNT(*) AS c FROM runners WHERE state='running'").fetchone()[
+        "c"
+    ]
+    pending = conn.execute("SELECT COUNT(*) AS c FROM runners WHERE state='pending'").fetchone()[
+        "c"
+    ]
     assert running == 3
     assert pending == 1
 
@@ -130,7 +146,9 @@ async def test_cleanup_pass_marks_failed_on_error(conn, proxmox):
 
 async def test_cleanup_pass_destroys_failed_with_vmid(conn, proxmox):
     db.insert_pending_runner(conn, job_id=1)
-    db.update_state_by_id(conn, runner_id=1, new_state="failed", vmid=9100, last_error="exec timeout")
+    db.update_state_by_id(
+        conn, runner_id=1, new_state="failed", vmid=9100, last_error="exec timeout"
+    )
 
     await cleanup_pass(conn=conn, proxmox=proxmox)
 
@@ -153,11 +171,13 @@ async def test_cleanup_pass_skips_failed_without_vmid(conn, proxmox):
 
 
 async def test_cleanup_pass_skips_failed_already_cleaned(conn, proxmox):
-    from datetime import datetime, timezone
     db.insert_pending_runner(conn, job_id=1)
     db.update_state_by_id(
-        conn, runner_id=1, new_state="failed", vmid=9100,
-        cleaned_at=datetime.now(timezone.utc),
+        conn,
+        runner_id=1,
+        new_state="failed",
+        vmid=9100,
+        cleaned_at=datetime.now(UTC),
     )
 
     await cleanup_pass(conn=conn, proxmox=proxmox)
@@ -194,9 +214,14 @@ async def test_run_loop_calls_passes_then_sleeps(conn, proxmox, github_client, m
 
     with pytest.raises(asyncio.CancelledError):
         await run(
-            conn=conn, proxmox=proxmox, github=github_client,
-            cap=3, template_vmid=9000, vmid_range=(9100, 9199),
-            runner_labels=["self-hosted", "lxc"], interval=2.0,
+            conn=conn,
+            proxmox=proxmox,
+            github=github_client,
+            cap=3,
+            template_vmid=9000,
+            vmid_range=(9100, 9199),
+            runner_labels=["self-hosted", "lxc"],
+            interval=2.0,
         )
 
     assert sleeps == [2.0, 2.0]

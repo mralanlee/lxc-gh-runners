@@ -37,22 +37,14 @@ class ProxmoxClient:
             if status.get("status") == "stopped":
                 exit_status = status.get("exitstatus", "")
                 if exit_status != "OK":
-                    raise RuntimeError(
-                        f"proxmox task {upid} failed: exitstatus={exit_status!r}"
-                    )
+                    raise RuntimeError(f"proxmox task {upid} failed: exitstatus={exit_status!r}")
                 return
             time.sleep(interval)
-        raise TimeoutError(
-            f"proxmox task {upid} did not complete within {timeout}s"
-        )
+        raise TimeoutError(f"proxmox task {upid} did not complete within {timeout}s")
 
     def list_lxcs_in_range(self, *, start: int, end: int) -> list[int]:
         all_lxcs = self._node_lxc().get()
-        return [
-            int(c["vmid"])
-            for c in all_lxcs
-            if start <= int(c["vmid"]) <= end
-        ]
+        return [int(c["vmid"]) for c in all_lxcs if start <= int(c["vmid"]) <= end]
 
     def allocate_vmid(self, *, start: int, end: int) -> int:
         used = set(self.list_lxcs_in_range(start=start, end=end))
@@ -94,9 +86,7 @@ class ProxmoxClient:
             raise ValueError(f"vmid {vmid} description missing started_at")
         return datetime.fromisoformat(m.group(1))
 
-    def wait_until_ready(
-        self, *, vmid: int, timeout: float = 30.0, interval: float = 1.0
-    ) -> None:
+    def wait_until_ready(self, *, vmid: int, timeout: float = 30.0, interval: float = 1.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.get_status(vmid=vmid) == "running":
@@ -111,9 +101,12 @@ class ProxmoxClient:
         pct_cmd = ["pct", "exec", str(vmid), "--", *cmd]
         ssh_args = [
             "ssh",
-            "-i", self._ssh_key_path,
-            "-o", f"StrictHostKeyChecking={self._ssh_strict_host_key_checking}",
-            "-o", "BatchMode=yes",
+            "-i",
+            self._ssh_key_path,
+            "-o",
+            f"StrictHostKeyChecking={self._ssh_strict_host_key_checking}",
+            "-o",
+            "BatchMode=yes",
             f"{self._ssh_user}@{self._ssh_host}",
             "--",
             *pct_cmd,
