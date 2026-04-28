@@ -47,7 +47,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs['controller--release_created'] }}
-      tag_name: ${{ steps.release.outputs['controller--tag_name'] }}
       major: ${{ steps.release.outputs['controller--major'] }}
       minor: ${{ steps.release.outputs['controller--minor'] }}
       patch: ${{ steps.release.outputs['controller--patch'] }}
