@@ -58,9 +58,9 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  release:
+  build-and-push:
     name: Build and push image
-    needs: test
+    needs: [test, release-please]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -84,6 +84,9 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,format=short
+            type=raw,value=${{ needs.release-please.outputs.major }},enable=${{ needs.release-please.outputs.release_created == 'true' }}
+            type=raw,value=${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }},enable=${{ needs.release-please.outputs.release_created == 'true' }}
+            type=raw,value=${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}.${{ needs.release-please.outputs.patch }},enable=${{ needs.release-please.outputs.release_created == 'true' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
