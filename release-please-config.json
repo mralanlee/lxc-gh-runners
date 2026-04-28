@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    "controller": {
+      "release-type": "python",
+      "package-name": "controller",
+      "include-component-in-tag": true,
+      "extra-files": ["pyproject.toml"]
+    }
+  }
+}
