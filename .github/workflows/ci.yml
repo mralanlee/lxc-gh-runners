@@ -6,8 +6,9 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  pull-requests: write
 
 jobs:
   test:
@@ -38,6 +39,24 @@ jobs:
 
       - name: Tests (pytest)
         run: uv run pytest -v
+
+  release-please:
+    name: Release-please
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs['controller--release_created'] }}
+      tag_name: ${{ steps.release.outputs['controller--tag_name'] }}
+      major: ${{ steps.release.outputs['controller--major'] }}
+      minor: ${{ steps.release.outputs['controller--minor'] }}
+      patch: ${{ steps.release.outputs['controller--patch'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
   release:
     name: Build and push image
