@@ -7,10 +7,11 @@ Ephemeral GitHub Actions runners on Proxmox LXC.
 
 ## What it is
 
-Self hosted GitHub Actions runners are stateful by default. They accumulate
-build artifacts, leak credentials between jobs, and are slow to clean up. This
-project provisions a fresh LXC container for every job and destroys it the
-moment the job finishes.
+Self hosted GitHub Actions runners reuse the same machine across jobs. Keeping
+them usable means either logging in to wipe volumes and caches between runs or
+baking cleanup steps into every workflow. This project runs each job in a
+fresh LXC container and destroys it when the job finishes, so there is nothing
+to clean up.
 
 ## How it works
 

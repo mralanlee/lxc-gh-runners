@@ -30,9 +30,11 @@ contributing note further down.
    Repo is `mralanlee/lxc-gh-runners`. Workflow name is `CI`.
    - License: `https://img.shields.io/badge/license-MIT-blue.svg`
    - CI: `https://github.com/mralanlee/lxc-gh-runners/actions/workflows/ci.yml/badge.svg`
-3. **What it is.** Two or three sentences. Problem (self hosted runners are
-   stateful, slow to clean up, and accumulate trust). Solution (clone an LXC
-   template per job, register via JIT config, destroy after the job finishes).
+3. **What it is.** Two or three sentences. Problem (self hosted runners reuse
+   the same machine across jobs, so you have to wipe volumes and caches
+   manually or bake cleanup steps into every workflow). Solution (clone an
+   LXC template per job, register via JIT config, destroy after the job
+   finishes, so there is nothing to clean up).
 4. **How it works.** Three or four lines describing the flow:
    GitHub `workflow_job` webhook fires, controller SSHes to the Proxmox host
    and runs `pct clone`, the cloned LXC starts the runner with a JIT config,
